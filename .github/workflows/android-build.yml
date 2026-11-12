@@ -15,19 +15,17 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: extracted/super-ai-core/requirements.txt
-
       - name: Extract project archive
         run: |
           unzip -q SUPER_AI_v0.4.1_local_first.zip -d extracted
           test -f extracted/super-ai-core/android/app/build.gradle.kts
           test -f extracted/super-ai-core/backend/main.py
           echo "Android and Core source trees found."
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Install Core test dependencies
         working-directory: extracted/super-ai-core
@@ -61,26 +59,24 @@ jobs:
           path = Path("app/build.gradle.kts")
           text = path.read_text(encoding="utf-8")
 
-          version_text, version_count = re.subn(
-              r'(?m)^(\s*versionName\s*=\s*)"[^"]+"',
-              r'\g<1>"0.4.2"',
-              text,
-          )
-          if version_count != 1:
+          # Ensure the generated APK identifies itself as 0.4.2.
+          pattern = r'(?m)^(\s*versionName\s*=\s*)"[^"]+"'
+          text, count = re.subn(pattern, r'\g<1>"0.4.2"', text)
+          if count != 1:
               raise SystemExit(
-                  f"Expected exactly one versionName assignment; found {version_count}"
+                  f"Cannot safely set versionName: expected one assignment, found {count}"
               )
 
-          code_match = re.search(r'(?m)^(\s*versionCode\s*=\s*)(\d+)', version_text)
-          if code_match:
-              old_code = int(code_match.group(2))
-              version_text = (
-                  version_text[:code_match.start(2)]
-                  + str(old_code + 1)
-                  + version_text[code_match.end(2):]
-              )
+          # Increment versionCode only when a single literal assignment exists.
+          code_pattern = r'(?m)^(\s*versionCode\s*=\s*)(\d+)'
+          code_match = list(re.finditer(code_pattern, text))
+          if len(code_match) == 1:
+              m = code_match[0]
+              text = text[:m.start(2)] + str(int(m.group(2)) + 1) + text[m.end(2):]
+          elif len(code_match) > 1:
+              raise SystemExit("Multiple versionCode assignments; refusing ambiguous edit")
 
-          android_match = re.search(r'(?m)^(\s*)android\s*\{', version_text)
+          android_match = re.search(r'(?m)^(\s*)android\s*\{', text)
           if not android_match:
               raise SystemExit("Could not locate android { } block")
 
@@ -94,8 +90,8 @@ jobs:
               + indent + '    jvmTarget = "17"\n'
               + indent + "}\n"
           )
-          version_text = version_text[:android_match.end()] + config + version_text[android_match.end():]
-          path.write_text(version_text, encoding="utf-8")
+          text = text[:android_match.end()] + config + text[android_match.end():]
+          path.write_text(text, encoding="utf-8")
           print("Prepared Android version 0.4.2 and Java/Kotlin JVM target 17.")
           PY
 
