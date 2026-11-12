@@ -2,7 +2,7 @@ name: Build SUPER AI Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, release/v0.4.2]
   workflow_dispatch:
 
 permissions:
@@ -15,6 +15,30 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: extracted/super-ai-core/requirements.txt
+
+      - name: Extract project archive
+        run: |
+          unzip -q SUPER_AI_v0.4.1_local_first.zip -d extracted
+          test -f extracted/super-ai-core/android/app/build.gradle.kts
+          test -f extracted/super-ai-core/backend/main.py
+          echo "Android and Core source trees found."
+
+      - name: Install Core test dependencies
+        working-directory: extracted/super-ai-core
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Run Core automated tests
+        working-directory: extracted/super-ai-core
+        run: python -m pytest -q
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -26,13 +50,7 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Extract project archive
-        run: |
-          unzip -q SUPER_AI_v0.4.1_local_first.zip -d extracted
-          test -f extracted/super-ai-core/android/app/build.gradle.kts
-          echo "Android project found."
-
-      - name: Align Java and Kotlin JVM targets
+      - name: Prepare Android release version and JVM targets
         working-directory: extracted/super-ai-core/android
         shell: bash
         run: |
@@ -43,13 +61,30 @@ jobs:
           path = Path("app/build.gradle.kts")
           text = path.read_text(encoding="utf-8")
 
-          # Configure both compilers explicitly, regardless of the project's
-          # original defaults or whether compileOptions already existed.
-          match = re.search(r'(?m)^(\s*)android\s*\{', text)
-          if not match:
-              raise SystemExit("Could not locate the android { } block in app/build.gradle.kts")
+          version_text, version_count = re.subn(
+              r'(?m)^(\s*versionName\s*=\s*)"[^"]+"',
+              r'\g<1>"0.4.2"',
+              text,
+          )
+          if version_count != 1:
+              raise SystemExit(
+                  f"Expected exactly one versionName assignment; found {version_count}"
+              )
 
-          indent = match.group(1) + "    "
+          code_match = re.search(r'(?m)^(\s*versionCode\s*=\s*)(\d+)', version_text)
+          if code_match:
+              old_code = int(code_match.group(2))
+              version_text = (
+                  version_text[:code_match.start(2)]
+                  + str(old_code + 1)
+                  + version_text[code_match.end(2):]
+              )
+
+          android_match = re.search(r'(?m)^(\s*)android\s*\{', version_text)
+          if not android_match:
+              raise SystemExit("Could not locate android { } block")
+
+          indent = android_match.group(1) + "    "
           config = (
               "\n" + indent + "compileOptions {\n"
               + indent + "    sourceCompatibility = JavaVersion.VERSION_17\n"
@@ -59,20 +94,30 @@ jobs:
               + indent + '    jvmTarget = "17"\n'
               + indent + "}\n"
           )
-          insert_at = match.end()
-          text = text[:insert_at] + config + text[insert_at:]
-          path.write_text(text, encoding="utf-8")
-          print("Explicit Java and Kotlin JVM targets set to 17.")
+          version_text = version_text[:android_match.end()] + config + version_text[android_match.end():]
+          path.write_text(version_text, encoding="utf-8")
+          print("Prepared Android version 0.4.2 and Java/Kotlin JVM target 17.")
           PY
 
       - name: Build debug APK
         working-directory: extracted/super-ai-core/android
         run: gradle --no-daemon --stacktrace assembleDebug
 
+      - name: Run Android unit tests
+        working-directory: extracted/super-ai-core/android
+        run: gradle --no-daemon testDebugUnitTest
+
+      - name: Verify APK output
+        run: |
+          APK="extracted/super-ai-core/android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          echo "APK size: $(stat -c%s "$APK") bytes"
+          sha256sum "$APK"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SUPER-AI-v0.4.1-debug-apk
+          name: SUPER-AI-v0.4.2-debug-apk
           path: extracted/super-ai-core/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
