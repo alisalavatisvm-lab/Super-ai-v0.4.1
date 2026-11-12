@@ -1,0 +1,43 @@
+name: Build SUPER AI Android APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Extract project archive
+        run: |
+          unzip -q SUPER_AI_v0.4.1_local_first.zip -d extracted
+          test -f extracted/super-ai-core/android/app/build.gradle.kts
+          echo "Android project found."
+
+      - name: Build debug APK
+        working-directory: extracted/super-ai-core/android
+        run: gradle --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SUPER-AI-v0.4.1-debug-apk
+          path: extracted/super-ai-core/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
