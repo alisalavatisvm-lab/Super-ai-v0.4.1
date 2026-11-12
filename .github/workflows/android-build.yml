@@ -42,19 +42,27 @@ jobs:
 
           path = Path("app/build.gradle.kts")
           text = path.read_text(encoding="utf-8")
-          original = text
 
-          text = re.sub(r'(sourceCompatibility\s*=\s*JavaVersion\.)VERSION_1_8', r'\1VERSION_17', text)
-          text = re.sub(r'(targetCompatibility\s*=\s*JavaVersion\.)VERSION_1_8', r'\1VERSION_17', text)
-          text = re.sub(r'(sourceCompatibility\s*=\s*)"1\.8"', r'\1"17"', text)
-          text = re.sub(r'(targetCompatibility\s*=\s*)"1\.8"', r'\1"17"', text)
+          # Configure both compilers explicitly, regardless of the project's
+          # original defaults or whether compileOptions already existed.
+          match = re.search(r'(?m)^(\\s*)android\\s*\\{', text)
+          if not match:
+              raise SystemExit("Could not locate the android { } block in app/build.gradle.kts")
 
-          if text == original:
-              print("No Java 8 declaration matched. Build file:")
-              print(original)
-              raise SystemExit("Expected Java 8 target was not found; refusing an unverified build.")
+          indent = match.group(1) + "    "
+          config = (
+              "\\n" + indent + "compileOptions {\\n"
+              + indent + "    sourceCompatibility = JavaVersion.VERSION_17\\n"
+              + indent + "    targetCompatibility = JavaVersion.VERSION_17\\n"
+              + indent + "}\\n"
+              + indent + "kotlinOptions {\\n"
+              + indent + '    jvmTarget = "17"\\n'
+              + indent + "}\\n"
+          )
+          insert_at = match.end()
+          text = text[:insert_at] + config + text[insert_at:]
           path.write_text(text, encoding="utf-8")
-          print("Java source/target compatibility aligned to 17.")
+          print("Explicit Java and Kotlin JVM targets set to 17.")
           PY
 
       - name: Build debug APK
