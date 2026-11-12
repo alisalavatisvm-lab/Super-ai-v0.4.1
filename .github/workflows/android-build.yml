@@ -45,19 +45,19 @@ jobs:
 
           # Configure both compilers explicitly, regardless of the project's
           # original defaults or whether compileOptions already existed.
-          match = re.search(r'(?m)^(\\s*)android\\s*\\{', text)
+          match = re.search(r'(?m)^(\s*)android\s*\{', text)
           if not match:
               raise SystemExit("Could not locate the android { } block in app/build.gradle.kts")
 
           indent = match.group(1) + "    "
           config = (
-              "\\n" + indent + "compileOptions {\\n"
-              + indent + "    sourceCompatibility = JavaVersion.VERSION_17\\n"
-              + indent + "    targetCompatibility = JavaVersion.VERSION_17\\n"
-              + indent + "}\\n"
-              + indent + "kotlinOptions {\\n"
-              + indent + '    jvmTarget = "17"\\n'
-              + indent + "}\\n"
+              "\n" + indent + "compileOptions {\n"
+              + indent + "    sourceCompatibility = JavaVersion.VERSION_17\n"
+              + indent + "    targetCompatibility = JavaVersion.VERSION_17\n"
+              + indent + "}\n"
+              + indent + "kotlinOptions {\n"
+              + indent + '    jvmTarget = "17"\n'
+              + indent + "}\n"
           )
           insert_at = match.end()
           text = text[:insert_at] + config + text[insert_at:]
