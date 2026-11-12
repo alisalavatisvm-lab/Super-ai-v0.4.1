@@ -44,30 +44,17 @@ jobs:
           text = path.read_text(encoding="utf-8")
           original = text
 
-          # The reported failure is Java target 1.8 vs Kotlin target 17.
-          # Raise Java source/bytecode compatibility to 17 in the Android app module.
-          text = re.sub(
-              r'(sourceCompatibility\\s*=\\s*JavaVersion\\.)VERSION_1_8',
-              r'\\1VERSION_17',
-              text
-          )
-          text = re.sub(
-              r'(targetCompatibility\\s*=\\s*JavaVersion\\.)VERSION_1_8',
-              r'\\1VERSION_17',
-              text
-          )
-
-          # Also handle projects that express Java 8 as a quoted string.
-          text = re.sub(r'(sourceCompatibility\\s*=\\s*)"1\\.8"', r'\\1"17"', text)
-          text = re.sub(r'(targetCompatibility\\s*=\\s*)"1\\.8"', r'\\1"17"', text)
+          text = re.sub(r'(sourceCompatibility\s*=\s*JavaVersion\.)VERSION_1_8', r'\1VERSION_17', text)
+          text = re.sub(r'(targetCompatibility\s*=\s*JavaVersion\.)VERSION_1_8', r'\1VERSION_17', text)
+          text = re.sub(r'(sourceCompatibility\s*=\s*)"1\.8"', r'\1"17"', text)
+          text = re.sub(r'(targetCompatibility\s*=\s*)"1\.8"', r'\1"17"', text)
 
           if text == original:
-              print("No Java 8 declaration matched; showing module build file for diagnosis:")
+              print("No Java 8 declaration matched. Build file:")
               print(original)
-          else:
-              path.write_text(text, encoding="utf-8")
-              print("Updated Java source/target compatibility to 17.")
-              print(text)
+              raise SystemExit("Expected Java 8 target was not found; refusing an unverified build.")
+          path.write_text(text, encoding="utf-8")
+          print("Java source/target compatibility aligned to 17.")
           PY
 
       - name: Build debug APK
